@@ -14,6 +14,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 
 	"golang.org/x/crypto/ssh"
@@ -153,6 +154,24 @@ func SSHAgent() ssh.AuthMethod {
 
 func runServer(host, port, keyfile string) {
 	filemap := map[string]*ssh.Channel{}
+	syncy := &sync.RWMutex{}
+
+	mapget := func(key string) (*ssh.Channel, bool) {
+		syncy.RLock()
+		defer syncy.RUnlock()
+		c, ok := filemap[key]
+		return c, ok
+	}
+	mapset := func(key string, channel *ssh.Channel) {
+		syncy.Lock()
+		filemap[key] = channel
+		syncy.Unlock()
+	}
+	mapdel := func(key string) {
+		syncy.Lock()
+		delete(filemap, key)
+		syncy.Unlock()
+	}
 
 	cfg := buildCfg()
 
@@ -210,8 +229,8 @@ func runServer(host, port, keyfile string) {
 							if err != nil {
 								continue
 							}
-							filemap[filereq.Path] = &channel
-							go func() { serverConn.Wait(); delete(filemap, filereq.Path) }()
+							mapset(filereq.Path, &channel)
+							go func() { serverConn.Wait(); mapdel(filereq.Path) }()
 							return
 						}
 					}()
@@ -221,7 +240,7 @@ func runServer(host, port, keyfile string) {
 	}()
 	http.ListenAndServe(":8888", http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		fp := strings.TrimPrefix(req.URL.Path, "/")
-		if channel, ok := filemap[fp]; ok {
+		if channel, ok := mapget(fp); ok {
 			defer func() { (*channel).Close() }()
 			enc := gob.NewEncoder(*channel)
 			err := enc.Encode(&FileReq{fp})
@@ -230,7 +249,7 @@ func runServer(host, port, keyfile string) {
 				return
 			}
 			io.Copy(rw, *channel)
-			delete(filemap, fp)
+			mapdel(fp)
 
 			return
 		} else {
