@@ -1,6 +1,7 @@
 package main // import "github.com/otremblay/sharethis"
 
 import (
+	"crypto/sha256"
 	"encoding/gob"
 	"flag"
 	"fmt"
@@ -10,6 +11,8 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/user"
+	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -36,8 +39,15 @@ func main() {
 	if len(flag.Args()) < 1 {
 		log.Fatalln("Need filename")
 	}
-	if _, err := os.Stat(flag.Arg(0)); err != nil {
+	var path string
+	if fs, err := os.Stat(flag.Arg(0)); err != nil {
 		log.Fatalln("Can't read file")
+	} else {
+		p, err := filepath.Abs(fs.Name())
+		if err != nil {
+			log.Fatalln("Can't read file")
+		}
+		path = p
 	}
 
 	if *bg {
@@ -47,8 +57,8 @@ func main() {
 		}
 		os.Exit(0)
 	}
-	path := fmt.Sprintf("%s/.ssh/st_rsa", os.Getenv("HOME"))
-	auth, err := PublicKeyFile(path)
+	keypath := fmt.Sprintf("%s/.ssh/st_rsa", os.Getenv("HOME"))
+	auth, err := PublicKeyFile(keypath)
 	if err != nil {
 		fmt.Println(err)
 		auth = SSHAgent()
@@ -74,7 +84,24 @@ func main() {
 	}
 	enc := gob.NewEncoder(ch)
 	path = flag.Arg(0)
-	err = enc.Encode(&FileReq{path})
+	var username string
+	userobj, err := user.Current()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Could not get user with user.Current()")
+		username = "unknown"
+	} else {
+		username = userobj.Username
+	}
+	hostname, err := os.Hostname()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Could not get hostname with os.Hostname()")
+		hostname = "unknown"
+	}
+	fullpath := fmt.Sprintf("%s@%s:%s", username, hostname, path)
+	hashedpath := fmt.Sprintf("%x", sha256.Sum256([]byte(fullpath)))
+	// In the words of weezer, I've got my hashed path.
+	fmt.Println(fmt.Sprintf("http://127.0.0.1:8888/%s", hashedpath))
+	err = enc.Encode(&FileReq{hashedpath})
 	if err != nil {
 		fmt.Println(err)
 		ch.Close()
@@ -88,7 +115,7 @@ func main() {
 			fmt.Println(err)
 			continue
 		}
-		if fr.Path == path {
+		if fr.Path == hashedpath {
 			defer ch.Close()
 			f, err := os.Open(path)
 			if err != nil {
