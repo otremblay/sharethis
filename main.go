@@ -33,9 +33,12 @@ type chanpair struct {
 func main() {
 	bg := flag.Bool("bg", false, "sends the process in the background")
 	server := flag.Bool("server", false, "makes the process an http server")
+	remotehost := flag.String("remote", "share.otremblay.com", "remote server for sharethis to contact")
+	sshport := flag.String("sshport", "2022", "the remote ssh port")
+	httpport := flag.String("httpport", "8888", "the remote server's http port")
 	flag.Parse()
 	if *server {
-		runServer("0.0.0.0", "2022", "id_rsa")
+		runServer("0.0.0.0", *sshport, *httpport, "id_rsa")
 	}
 	if len(flag.Args()) < 1 {
 		log.Fatalln("Need filename")
@@ -73,7 +76,7 @@ func main() {
 			return nil
 		},
 	}
-	connection, err := ssh.Dial("tcp", "127.0.0.1:2022", sshConfig)
+	connection, err := ssh.Dial("tcp", fmt.Sprintf("%s:%s", *remotehost, *sshport), sshConfig)
 	if err != nil {
 		log.Fatalln("Failed to dial: %s", err)
 	}
@@ -100,8 +103,11 @@ func main() {
 	}
 	fullpath := fmt.Sprintf("%s@%s:%s", username, hostname, path)
 	hashedpath := fmt.Sprintf("%x", sha256.Sum256([]byte(fullpath)))
+
 	// In the words of weezer, I've got my hashed path.
-	fmt.Println(fmt.Sprintf("http://127.0.0.1:8888/%s", hashedpath))
+	// TODO: Get the remote URL from the remote server instead of rebuilding it locally.
+	// TODO: Clean up the port from the URL if it's 80 or 443
+	fmt.Println(fmt.Sprintf("http://%s:%s/%s", *remotehost, *httpport, hashedpath))
 	err = enc.Encode(&FileReq{hashedpath})
 	if err != nil {
 		fmt.Println(err)
@@ -152,7 +158,7 @@ func SSHAgent() ssh.AuthMethod {
 	return nil
 }
 
-func runServer(host, port, keyfile string) {
+func runServer(host, sshport, httpport, keyfile string) {
 	filemap := map[string]*ssh.Channel{}
 	syncy := &sync.RWMutex{}
 
@@ -187,7 +193,7 @@ func runServer(host, port, keyfile string) {
 	}
 	cfg.AddHostKey(private)
 
-	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%s", host, port))
+	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%s", host, sshport))
 	if err != nil {
 		log.Fatal("failed to listen for connection: ", err)
 	}
@@ -238,7 +244,7 @@ func runServer(host, port, keyfile string) {
 			}()
 		}
 	}()
-	http.ListenAndServe(":8888", http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+	http.ListenAndServe(fmt.Sprintf(":%s", httpport), http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		fp := strings.TrimPrefix(req.URL.Path, "/")
 		if channel, ok := mapget(fp); ok {
 			defer func() { (*channel).Close() }()
