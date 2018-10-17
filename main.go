@@ -35,6 +35,9 @@ func main() {
 	httpport := flag.String("httpport", "8888", "the remote server's http port")
 	sharecount := flag.Uint("count", 1, "Amount of times you want to share this file")
 	flag.Parse()
+	if *sharecount > 0 {
+		*sharecount--
+	}
 	if *server {
 		runServer("0.0.0.0", *sshport, *httpport, "id_rsa")
 	}
@@ -65,8 +68,16 @@ func main() {
 		fmt.Println(err)
 		auth = SSHAgent()
 	}
+	var username string
+	userobj, err := user.Current()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Could not get user with user.Current()")
+		username = "unknown"
+	} else {
+		username = userobj.Username
+	}
 	sshConfig := &ssh.ClientConfig{
-		User: "otremblay",
+		User: username,
 		Auth: []ssh.AuthMethod{
 			auth,
 		},
@@ -86,14 +97,7 @@ func main() {
 	}
 	enc := gob.NewEncoder(ch)
 	path = flag.Arg(0)
-	var username string
-	userobj, err := user.Current()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "Could not get user with user.Current()")
-		username = "unknown"
-	} else {
-		username = userobj.Username
-	}
+
 	hostname, err := os.Hostname()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Could not get hostname with os.Hostname()")
