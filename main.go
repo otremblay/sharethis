@@ -348,7 +348,7 @@ func buildCfg() *ssh.ServerConfig {
 		pubKey, comment, _, rest, err := ssh.ParseAuthorizedKey(authorizedKeysBytes)
 		fmt.Println(comment)
 		if err != nil {
-			log.Fatal("keypoop", err)
+			log.Fatal("authorized_keys error", err)
 		}
 
 		authorizedKeysMap[string(pubKey.Marshal())] = comment
