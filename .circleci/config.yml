@@ -9,7 +9,7 @@ jobs:
     machine: true
     resource_class: otremblay/some-runner
     steps:
-      - run: echo "Hi I'm on Runners!"
+      - checkout
 
 # Invoke jobs via workflows
 # See: https://circleci.com/docs/2.0/configuration-reference/#workflows
