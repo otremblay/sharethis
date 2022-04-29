@@ -6,8 +6,8 @@ version: 2.1
 # See: https://circleci.com/docs/2.0/configuration-reference/#jobs
 jobs:
   say-hello:
-    machine: true
-    resource_class: otremblay/some-runner
+    docker:
+      - image: cimg/base:stable
     steps:
       - checkout
 
