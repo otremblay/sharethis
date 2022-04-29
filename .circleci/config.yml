@@ -7,8 +7,9 @@ version: 2.1
 jobs:
   say-hello:
     docker:
-      - image: cimg/base:stable
+      - image: alpine:latest
     steps:
+      - run:which git
       - checkout
 
 # Invoke jobs via workflows
