@@ -9,7 +9,7 @@ jobs:
     docker:
       - image: alpine:latest
     steps:
-      - run:which git
+      - run: which git
       - checkout
 
 # Invoke jobs via workflows
